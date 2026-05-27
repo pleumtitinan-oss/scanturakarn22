@@ -1,0 +1,1571 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doc Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f3f4f6; overflow-x: hidden; }
+        .loader { border: 4px solid #e5e7eb; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .pill { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 500; white-space: nowrap; }
+        .tab { padding: 0.75rem 1rem; border-bottom: 3px solid transparent; transition: all 0.2s; cursor: pointer; white-space: nowrap; }
+        .tab:hover { background: #eff6ff; }
+        .tab.active { border-color: #3b82f6; color: #3b82f6; font-weight: 600; background: #eff6ff; }
+        .badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 0.3rem; font-weight: 500; white-space: nowrap; }
+        .t-in { background: #dbeafe; color: #1e40af; }
+        .t-order { background: #fee2e2; color: #991b1b; }
+        .t-memo { background: #d1fae5; color: #065f46; }
+        .t-other { background: #f3f4f6; color: #374151; }
+        .s-wait { background: #fef3c7; color: #92400e; }
+        .s-done { background: #d1fae5; color: #065f46; }
+        .s-back { background: #fee2e2; color: #991b1b; }
+        .s-proc { background: #dbeafe; color: #1e40af; }
+        tr:hover { background: #f9fafb; }
+        .btn-icon { padding: 0.5rem; border-radius: 9999px; transition: all 0.2s; }
+        .btn-icon:hover { transform: scale(1.1); }
+        .qr-header { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+        .qr-header-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.2); }
+        .qr-header-item:last-child { border-bottom: none; }
+        .qr-header-label { font-size: 0.75rem; opacity: 0.8; }
+        .qr-header-value { font-weight: bold; font-size: 0.9rem; }
+        #qr-reader { width: 100%; }
+        #qr-reader video { border-radius: 8px; }
+        .month-card { transition: all 0.3s; cursor: pointer; user-select: none; }
+        .month-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .month-card.active { ring: 2px; ring-color: #3b82f6; border-color: #3b82f6; }
+        .refresh-indicator { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .dashboard-section { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stat-card { backdrop-filter: blur(10px); background: rgba(255,255,255,0.95); }
+        
+        /* New Styles for Login Tabs */
+        .login-tabs { display: flex; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; }
+        .login-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; color: #6b7280; font-weight: 500; border-bottom: 2px solid transparent; }
+        .login-tab.active { color: #2563eb; border-color: #2563eb; }
+        
+        /* FIX: Responsive QR Code */
+        #qrBox { display: flex; justify-content: center; align-items: center; background: white; }
+        #qrBox img, #qrBox canvas { 
+            max-width: 100% !important; 
+            height: auto !important; 
+            margin: 0 auto;
+        }
+        
+        /* FIX: Scrollable Modal for small screens */
+        .modal-scrollable {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #qr-reader__dashboard_section_swaplink { display: none !important; }
+        #qr-reader button { border-radius: 0.5rem; padding: 0.35rem 0.75rem; background: #4f46e5; color: white; font-size: 0.875rem; }
+        #qr-reader select { border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 0.35rem; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div id="loader" class="fixed inset-0 z-50 flex items-center justify-center bg-white/80">
+    <div class="loader"></div>
+</div>
+
+<div id="vLogin" class="min-h-screen flex items-center justify-center p-4 hidden bg-gradient-to-br from-blue-50 to-indigo-50">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 text-center">
+        <img id="logoLogin" src="" class="mx-auto h-20 w-20 mb-4">
+        <h2 class="text-2xl font-bold mb-2" id="nameLogin">ระบบสารบรรณ</h2>
+        
+        <div class="login-tabs">
+            <div class="login-tab" id="tabBtn-search" onclick="switchLoginTab('search')">ติดตามสถานะ</div>
+            <div class="login-tab active" id="tabBtn-login" onclick="switchLoginTab('login')">เข้าสู่ระบบ</div>
+        </div>
+
+        <div id="tabLogin">
+            <p class="text-gray-500 mb-6 text-sm">สำหรับเจ้าหน้าที่/แอดมิน</p>
+            <form onsubmit="return doLogin(event)">
+                <input type="password" id="pwd" placeholder="รหัสผ่าน" class="w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 mb-4">
+                <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition-all active:scale-95">เข้าสู่ระบบ</button>
+            </form>
+        </div>
+
+        <div id="tabSearch" class="hidden text-left">
+            <p class="text-gray-500 mb-4 text-center text-sm">ค้นหาเอกสารโดยไม่ต้องเข้าสู่ระบบ</p>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="publicSearchInput" placeholder="เลขรับอว., เลขรับ หรือ ชื่อเรื่อง..." class="w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-green-500">
+                <button onclick="doPublicSearch()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
+            </div>
+            
+            <div id="publicResults" class="max-h-60 overflow-y-auto space-y-2 text-sm border-t pt-2">
+                <div class="text-center text-gray-400 py-4"><i class="fas fa-search text-2xl mb-2 block"></i>กรอกข้อมูลเพื่อค้นหา</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="vDash" class="min-h-screen hidden flex flex-col">
+    <nav class="bg-white shadow sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 flex justify-between h-14 items-center">
+            <div class="flex items-center gap-2">
+                <img id="logoNav" src="" class="h-8">
+                <span class="font-bold text-lg text-blue-900 hidden sm:block" id="nameNav">System</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 mr-2">
+                    <span class="text-xs text-gray-500 hidden sm:inline">รีเฟรชอัตโนมัติ</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="autoRefresh" class="sr-only peer" checked>
+                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <span id="refreshTimer" class="text-xs text-blue-600 font-mono hidden">30s</span>
+                </div>
+                <button onclick="doRefresh()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm" title="รีเฟรช">
+                    <i class="fas fa-sync-alt" id="refreshIcon"></i>
+                </button>
+                <button onclick="openScanner()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm" title="สแกน QR Code หนังสือ">
+                    <i class="fas fa-camera mr-1"></i><span class="hidden sm:inline">สแกน</span>
+                </button>
+                <button onclick="openAdd()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">
+                    <i class="fas fa-plus mr-1"></i><span class="hidden sm:inline">สร้าง</span>
+                </button>
+                <button onclick="doLogout()" class="text-gray-500 hover:text-red-500 px-2" title="ออกจากระบบ">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 w-full flex-grow">
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-xl p-4 border-l-4 border-blue-500 flex justify-between items-center shadow-sm">
+                <div><div class="text-gray-500 text-xs">ทั้งหมด</div><div class="text-xl font-bold" id="sTotal">0</div></div>
+                <i class="fas fa-folder text-blue-200 text-2xl"></i>
+            </div>
+            <div class="bg-white rounded-xl p-4 border-l-4 border-yellow-500 flex justify-between items-center shadow-sm">
+                <div><div class="text-gray-500 text-xs">รอดำเนินการ</div><div class="text-xl font-bold" id="sPend">0</div></div>
+                <i class="fas fa-clock text-yellow-200 text-2xl"></i>
+            </div>
+            <div class="bg-white rounded-xl p-4 border-l-4 border-green-500 flex justify-between items-center shadow-sm">
+                <div><div class="text-gray-500 text-xs">เสร็จสิ้น</div><div class="text-xl font-bold" id="sDone">0</div></div>
+                <i class="fas fa-check-circle text-green-200 text-2xl"></i>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow mb-6 overflow-hidden">
+            <div class="dashboard-section p-4 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-lg"><i class="fas fa-chart-bar mr-2"></i>แดชบอร์ดภาพรวมรายเดือน</h3>
+                        <p class="text-sm opacity-80">สรุปสถิติการรับ-ดำเนินการเอกสารในแต่ละเดือน</p>
+                    </div>
+                    <select id="yearSelect" onchange="updateMonthlyDashboard()" class="bg-white/20 border border-white/30 rounded-lg px-3 py-1 text-white text-sm outline-none focus:bg-white/30 cursor-pointer">
+                    </select>
+                </div>
+            </div>
+            
+            <div class="p-4">
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-4" id="monthCards">
+                    </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <h4 class="font-semibold text-gray-700 mb-3"><i class="fas fa-chart-line mr-2 text-blue-500"></i>กราฟสถิติรายเดือน</h4>
+                        <div class="relative h-64 w-full">
+                            <canvas id="monthlyChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <h4 class="font-semibold text-gray-700 mb-3"><i class="fas fa-info-circle mr-2 text-green-500"></i>รายละเอียดเดือนที่เลือก</h4>
+                        <div id="monthlyDetail" class="space-y-3">
+                            <p class="text-gray-500 text-center py-4">เลือกเดือนเพื่อดูรายละเอียด</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow overflow-hidden">
+            <div class="p-4 border-b flex flex-col sm:flex-row justify-between gap-3">
+                <h3 class="font-bold"><i class="fas fa-list-alt mr-2 text-blue-500"></i>รายการเอกสาร</h3>
+                <div class="flex gap-2">
+                    <select id="monthFilter" onchange="applyFilters()" class="px-3 py-2 border rounded-lg text-sm bg-gray-50">
+                        <option value="">ทุกเดือน</option>
+                    </select>
+                    <input type="text" id="search" onkeyup="doSearch()" placeholder="🔍 ค้นหา..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-56 bg-gray-50">
+                </div>
+            </div>
+            
+            <div class="flex overflow-x-auto border-b bg-gray-50 text-sm no-scrollbar">
+                <div class="tab active" data-t="all" onclick="filterType('all')"><i class="fas fa-th-list mr-1"></i>ทั้งหมด <span class="ml-1 bg-gray-200 px-2 rounded-full text-xs" id="cAll">0</span></div>
+                <div class="tab" data-t="หนังสือรับ" onclick="filterType('หนังสือรับ')"><i class="fas fa-envelope-open-text mr-1"></i>หนังสือรับ <span class="ml-1 bg-blue-100 text-blue-700 px-2 rounded-full text-xs" id="cIn">0</span></div>
+                <div class="tab" data-t="คำสั่ง" onclick="filterType('คำสั่ง')"><i class="fas fa-gavel mr-1"></i>คำสั่ง <span class="ml-1 bg-red-100 text-red-700 px-2 rounded-full text-xs" id="cOrder">0</span></div>
+                <div class="tab" data-t="บันทึกข้อความ" onclick="filterType('บันทึกข้อความ')"><i class="fas fa-sticky-note mr-1"></i>บันทึก <span class="ml-1 bg-green-100 text-green-700 px-2 rounded-full text-xs" id="cMemo">0</span></div>
+                <div class="tab" data-t="อื่นๆ" onclick="filterType('อื่นๆ')"><i class="fas fa-ellipsis-h mr-1"></i>อื่นๆ <span class="ml-1 bg-gray-100 px-2 rounded-full text-xs" id="cOther">0</span></div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                        <tr>
+                            <th class="px-4 py-3 text-left">เลขรับ</th>
+                            <th class="px-4 py-3 text-left">ประเภท/วันที่</th>
+                            <th class="px-4 py-3 text-left">เรื่อง</th>
+                            <th class="px-4 py-3 text-left">ผู้รับผิดชอบ</th>
+                            <th class="px-4 py-3 text-left">สถานะ</th>
+                            <th class="px-4 py-3 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tBody"></tbody>
+                </table>
+                <div id="empty" class="hidden p-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p>ไม่มีข้อมูล</p></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div id="mPublicDetail" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-lg"><i class="fas fa-info-circle mr-2"></i>รายละเอียดสถานะ</h3>
+            <button onclick="hide('mPublicDetail')" class="text-white hover:text-gray-200"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="p-5 space-y-3">
+             <div class="grid grid-cols-2 gap-3 mb-2">
+                <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                    <div class="text-xs text-gray-500 font-semibold">เลขรับ</div>
+                    <div id="pdDocNo" class="font-bold text-blue-600">-</div>
+                </div>
+                <div class="bg-purple-50 p-2 rounded border border-purple-100">
+                    <div class="text-xs text-gray-500 font-semibold">เลขรับอว</div>
+                    <div id="pdDocNoOW" class="font-bold text-purple-600">-</div>
+                </div>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 font-semibold">เรื่อง</label>
+                <div id="pdTopic" class="text-gray-800 font-medium bg-gray-50 p-2 rounded border break-words">-</div>
+            </div>
+            <div class="flex justify-between">
+                <div>
+                     <label class="text-xs text-gray-500 font-semibold block">วันที่</label>
+                     <span id="pdDate" class="text-sm">-</span>
+                </div>
+                <div class="text-right">
+                     <label class="text-xs text-gray-500 font-semibold block">สถานะปัจจุบัน</label>
+                     <span id="pdStatus" class="pill border">-</span>
+                </div>
+            </div>
+            
+            <div class="mt-4 border-t pt-3">
+                <label class="text-xs text-gray-500 font-semibold block mb-2"><i class="fas fa-history mr-1"></i>ประวัติการดำเนินการ</label>
+                <div id="pdLog" class="text-xs bg-gray-50 p-3 rounded border text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto">-</div>
+            </div>
+        </div>
+        <div class="bg-gray-50 p-3 text-center border-t">
+            <button onclick="hide('mPublicDetail')" class="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-100 text-sm">ปิดหน้าต่าง</button>
+        </div>
+    </div>
+</div>
+
+<div id="vUpdate" class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-white text-center">
+            <i class="fas fa-qrcode text-3xl mb-1"></i>
+            <h2 class="text-lg font-bold">อัพเดทสถานะเอกสาร</h2>
+            <p class="text-blue-100 text-xs">สแกน QR Code เพื่ออัพเดทสถานะ</p>
+        </div>
+        
+        <div class="p-5">
+            <div class="bg-blue-50 p-4 rounded-xl mb-5 border border-blue-100 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-xs text-gray-500 font-semibold">เลขรับ</label><div id="uDocNo" class="font-bold text-blue-600 mt-1">-</div></div>
+                    <div><label class="text-xs text-gray-500 font-semibold">เลขรับอว</label><div id="uDocNoOW" class="font-bold text-purple-600 mt-1">-</div></div>
+                </div>
+                <div><label class="text-xs text-gray-500 font-semibold">ประเภท</label><div id="uType" class="mt-1"></div></div>
+                <div><label class="text-xs text-gray-500 font-semibold">เรื่อง</label><div id="uTopic" class="font-bold text-gray-800 mt-1 break-words">-</div></div>
+                <div><label class="text-xs text-gray-500 font-semibold">ผู้รับผิดชอบ</label><div id="uOwner" class="text-gray-700 mt-1">-</div></div>
+                <div><label class="text-xs text-gray-500 font-semibold">สถานะปัจจุบัน</label><div class="mt-1"><span id="uStatus" class="pill bg-white border">-</span></div></div>
+            </div>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">เปลี่ยนสถานะเป็น</label>
+                    <select id="selStatus" class="w-full p-3 border rounded-lg bg-gray-50">
+                        <option value="รับเรื่อง">📥 รับเรื่อง</option>
+                        <option value="กำลังตรวจสอบ">🔍 กำลังตรวจสอบ</option>
+                        <option value="แก้ไข/ตีกลับ">📤 แก้ไข/ตีกลับ </option>
+                        <option value="ยกเลิก">ยกเลิก</option>
+                        <option value="อนุมัติ">✅ อนุมัติ</option>
+                        <option value="เสนอหัวหน้างานคลังและพัสดุ">เสนอหัวหน้างานคลังและพัสดุ</option>
+                        <option value="เสนอหัวหน้าสำนักงานเลขานุการ"> เสนอหัวหน้าสำนักงานเลขานุการ</option>
+                        <option value="เสนอคณบดี">เสนอคณบดี</option>
+                        <option value="เสนอรองคณบดี">เสนอรองคณบดี</option>
+                        <option value="บัญชี">บัญชี</option>
+                        <option value="การเงิน">การเงิน</option>
+                        <option value="เบิกจ่ายแล้ว">เบิกจ่ายแล้ว</option>
+                        <option value="พัสดุ">พัสดุ</option>
+                        <option value="ภาคครุศึกษา">ภาคครุศึกษา</option>
+                        <option value="ภาคการพัฒนาทรัพยากรมนุษย์และชุมชน">ภาคการพัฒนาทรัพยากรมนุษย์และชุมชน</option>
+                        <option value="ภาคพลศึกษาและกีฬา">ภาคพลศึกษาและกีฬา</option>
+                        <option value="โรงเรียนสาธิตเกษตรฯ">โรงเรียนสาธิตเกษตรฯ</option>
+                        <option value="สำนักงานเลขานุการ">สำนักงานเลขานุการ</option>
+                        <option value="ศูนย์วิจัยและบริการวิชาการ">ศูนย์วิจัยและบริการวิชาการ</option>
+                        <option value="งานบริการการศึกษา">งานบริการการศึกษา</option>
+                        <option value="งานบริหารและธุรการ">งานบริหารและธุรการ</option>
+                        <option value="งานนโยบายและแผน">งานนโยบายและแผน</option>
+                        <option value="กองทุนพัฒนานิสิต">กองทุนพัฒนานิสิต</option>
+                        <option value="ศูนย์ฝึกประสบการณ์วิชาชีพ">ศูนย์ฝึกประสบการณ์วิชาชีพ</option>
+                        <option value="สโมรสรนิสิต">สโมรสรนิสิต</option>
+                        <option value="ชุมนุมนิสิต">ชุมนุมนิสิต</option>
+                        <option value="ป.โท การพัฒฯ ">ป.โท การพัฒฯ </option>
+                        <option value="ป.โท นวัตกรรมการศึกษา">ป.โท นวัตกรรมการศึกษา</option>
+                        <option value="ป.โท การบริหารการศึกษา">ป.โท การบริหารการศึกษา</option>
+                        <option value="ป.โท พลศึกษา">ป.โท พลศึกษา</option>
+                        <option value="ป.เอก การพัฒฯ">ป.เอก การพัฒฯ</option>
+                        <option value="ป.เอก พลศึกษา">ป.เอก พลศึกษา</option>
+                        <option value="ป.เอก วิทยาศาสตร์ศึกษา">ป.เอก วิทยาศาสตร์ศึกษา</option>
+                        <option value="ป.เอก การบริหารการศึกษา">ป.เอก การบริหารการศึกษา</option>
+                        <option value="งานคลัง กพส.">งานคลัง กพส.</option>
+                        <option value="กองคลัง บางเขน">กองคลัง บางเขน</option>
+                        <option value="กองบริหารทั่วไป กพส.">กองบริหารทั่วไป กพส.</option>
+                        <option value="กองทรัพยากรมนุษย์ บางเขน">กองทรัพยากรมนุษย์ บางเขน</option>
+                        <option value="สำนักงานตรวจสอบภายใน บางเขน ">สำนักงานตรวจสอบภายใน บางเขน </option>
+                        <option value="กองทรัพยากรมนุษย์ บางเขน">อื่นๆ (สามารถพิมพ์ระบุได้)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">ชื่อผู้ดำเนินการ</label>
+                    <input type="text" id="updater" placeholder="เช่น ครูสมชาย" class="w-full p-3 border rounded-lg bg-gray-50">
+                </div>
+                <button onclick="doUpdateStatus()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition-all active:scale-95"><i class="fas fa-save mr-2"></i>บันทึกสถานะ</button>
+                
+                <button onclick="openScanner()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all active:scale-95"><i class="fas fa-camera mr-2"></i>สแกน QR ต่อ</button>
+                
+                <button onclick="goHomeDash()" class="w-full bg-white hover:bg-gray-50 text-gray-700 py-3 rounded-lg border shadow-sm transition-all active:scale-95"><i class="fas fa-arrow-left mr-2"></i>กลับหน้าหลัก</button>
+            </div>
+
+            <div class="mt-5">
+                <p class="text-xs text-gray-500 mb-2"><i class="fas fa-history mr-1"></i>ประวัติ</p>
+                <div id="uLog" class="bg-gray-50 p-3 rounded-lg text-xs text-gray-600 max-h-28 overflow-y-auto whitespace-pre-wrap border">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="vEdit" class="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 p-5 text-white text-center">
+            <i class="fas fa-edit text-3xl mb-1"></i>
+            <h2 class="text-lg font-bold">แก้ไขข้อมูลเอกสาร</h2>
+        </div>
+        
+        <form id="fEdit" onsubmit="return doEdit(event)" class="p-5">
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 mb-1 block">เลขรับ</label>
+                        <input type="text" id="eDocNo" class="w-full p-3 border rounded-lg bg-gray-50" placeholder="เช่น 001">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 mb-1 block">เลขรับอว</label>
+                        <input type="text" id="eDocNoOW" class="w-full p-3 border rounded-lg bg-gray-50" placeholder="เช่น อว.001">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">ประเภท</label>
+                    <select id="eType" class="w-full p-3 border rounded-lg bg-gray-50">
+                        <option>หนังสือรับ</option>
+                        <option>คำสั่ง</option>
+                        <option>บันทึกข้อความ</option>
+                        <option>อื่นๆ</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">เรื่อง</label>
+                    <input type="text" id="eTopic" required class="w-full p-3 border rounded-lg bg-gray-50">
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">วันที่เอกสาร</label>
+                    <input type="date" id="eDate" required class="w-full p-3 border rounded-lg bg-gray-50">
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">เอกสารจากหน่วยงาน</label>
+                    <input type="text" id="eOwner" required class="w-full p-3 border rounded-lg bg-gray-50">
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 mb-1 block">สถานะปัจจุบัน</label>
+                    <div><span id="eStatus" class="pill bg-gray-100">-</span></div>
+                </div>
+            </div>
+            
+            <div class="mt-6 space-y-3">
+                <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg shadow-md transition-all active:scale-95"><i class="fas fa-save mr-2"></i>บันทึกการแก้ไข</button>
+                <button type="button" onclick="goHomeDash()" class="w-full bg-white hover:bg-gray-50 text-gray-700 py-3 rounded-lg border shadow-sm transition-all active:scale-95"><i class="fas fa-arrow-left mr-2"></i>กลับหน้าหลัก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="mAdd" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <form id="fAdd" onsubmit="return doAdd(event)">
+            <div class="p-5">
+                <h3 class="text-lg font-bold mb-4"><i class="fas fa-plus-circle mr-2 text-blue-500"></i>เพิ่มเอกสารใหม่</h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-sm font-medium">เลขรับ</label>
+                            <input type="text" name="docNo" id="addDocNo" class="mt-1 w-full p-2 border rounded-lg bg-gray-50" placeholder="เช่น 001">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">เลขรับอว</label>
+                            <input type="text" name="docNoOW" class="mt-1 w-full p-2 border rounded-lg bg-gray-50" placeholder="เช่น อว.001">
+                        </div>
+                    </div>
+                    <div><label class="text-sm font-medium">ประเภท</label><select name="docType" class="mt-1 w-full p-2 border rounded-lg bg-gray-50"><option>หนังสือรับ</option><option>คำสั่ง</option><option>บันทึกข้อความ</option><option>อื่นๆ</option></select></div>
+                    <div><label class="text-sm font-medium">เรื่อง</label><input type="text" name="topic" required class="mt-1 w-full p-2 border rounded-lg bg-gray-50"></div>
+                    <div><label class="text-sm font-medium">วันที่เอกสาร</label><input type="date" name="docDate" required class="mt-1 w-full p-2 border rounded-lg bg-gray-50"></div>
+                    <div><label class="text-sm font-medium">ผู้รับผิดชอบ</label><input type="text" name="owner" required class="mt-1 w-full p-2 border rounded-lg bg-gray-50"></div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-5 py-3 flex justify-end gap-2">
+                <button type="button" onclick="closeAdd()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">ยกเลิก</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">บันทึก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="mQr" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+    <div class="bg-white p-6 rounded-xl text-center max-w-sm w-full shadow-2xl modal-scrollable">
+        <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-check text-green-600 text-xl"></i></div>
+        <h3 class="font-bold mb-3">บันทึกสำเร็จ!</h3>
+        
+        <div class="qr-header text-left" id="qrHeaderInfo">
+            <div class="qr-header-item">
+                <span class="qr-header-label">งาน:</span>
+                <span class="qr-header-value" id="qrDept">งานคลังและพัสดุ ศษ.พ.มก</span>
+            </div>
+            <div class="qr-header-item">
+                <span class="qr-header-label">เลขรับ:</span>
+                <span class="qr-header-value" id="qrDocNo">-</span>
+            </div>
+            <div class="qr-header-item">
+                <span class="qr-header-label">วันที่:</span>
+                <span class="qr-header-value" id="qrDate">-</span>
+            </div>
+            <div class="qr-header-item">
+                <span class="qr-header-label">เวลา:</span>
+                <span class="qr-header-value" id="qrTime">-</span>
+            </div>
+        </div>
+        
+        <p class="text-sm text-gray-500 mb-2">สแกน QR เพื่อติดตามสถานะ</p>
+        <div id="qrBox" class="flex justify-center mb-3 p-3 border-2 border-dashed rounded-lg bg-white"></div>
+        <p class="text-xs text-gray-400 mb-3 break-all" id="qrUrl"></p>
+        <div class="flex gap-2 justify-center">
+            <button onclick="dlQrWithHeader()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"><i class="fas fa-download mr-1"></i>ดาวน์โหลด</button>
+            <button onclick="closeQr()" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm transition-colors">ปิด</button>
+        </div>
+    </div>
+</div>
+
+<div id="mScanner" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/90 p-4">
+    <div class="bg-white p-5 rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg"><i class="fas fa-camera mr-2 text-indigo-600"></i>สแกน QR Code หนังสือ</h3>
+            <button onclick="closeScanner()" class="text-gray-500 hover:text-red-500 text-xl"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div id="cameraPermissionBox" class="bg-indigo-50 border border-indigo-100 text-indigo-800 text-sm rounded-lg p-3 mb-3">
+            <div class="font-semibold mb-1"><i class="fas fa-circle-info mr-1"></i>คำแนะนำการใช้กล้อง</div>
+            <div>ให้เปิดผ่านลิงก์ Web App ที่ Deploy แล้วเท่านั้น และกดอนุญาต Camera/กล้องบนเบราว์เซอร์</div>
+        </div>
+
+        <label class="text-sm font-medium text-gray-700 mb-1 block">เลือกกล้อง</label>
+        <div class="flex gap-2 mb-3">
+            <select id="cameraSelect" class="flex-1 p-2 border rounded-lg bg-gray-50 text-sm">
+                <option value="">กำลังค้นหากล้อง...</option>
+            </select>
+            <button onclick="startSelectedCamera()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm">
+                เริ่ม
+            </button>
+        </div>
+
+        <div id="qr-reader" class="mb-4 rounded-lg overflow-hidden border bg-gray-50"></div>
+        <p id="scannerHint" class="text-sm text-gray-500 text-center">หันกล้องไปที่ QR Code ของเอกสาร ระบบจะเปิดหน้ารายละเอียดให้อัตโนมัติ</p>
+
+        <div class="border-t mt-4 pt-4">
+            <label class="text-sm font-medium text-gray-700 mb-1 block">หรือกรอกเลข ID/ลิงก์จาก QR ด้วยตนเอง</label>
+            <div class="flex gap-2">
+                <input id="manualQrInput" type="text" class="flex-1 p-2 border rounded-lg bg-gray-50 text-sm" placeholder="วางลิงก์ QR หรือ ID เอกสาร">
+                <button onclick="handleManualQrInput()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm">เปิด</button>
+            </div>
+        </div>
+
+        <button onclick="closeScanner()" class="w-full mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded-lg">ยกเลิก</button>
+    </div>
+</div>
+
+<canvas id="qrCanvas" style="display:none;"></canvas>
+
+<script>
+// Config
+// GitHub Pages + Google Apps Script backend configuration
+// 1) Deploy Code.gs as Web App
+// 2) Paste the /exec URL below
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzw7Db657-lwjOB6ZWt0-KN9m42tR42IPIsy8imzf3LauSzGsfcYGWZluGjb4vcmdwjyQ/exec';
+
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const MODE = (URL_PARAMS.get('view') === 'update') ? 'mobile_update' : (URL_PARAMS.get('view') === 'edit') ? 'edit_doc' : 'dashboard';
+let DOC_ID = (URL_PARAMS.get('id') || '').trim();
+let CFG = {}, DOCS = [], FILTER = 'all';
+let CURRENT_QR_DATA = {};
+let html5QrCode = null;
+let monthlyChart = null;
+let selectedMonth = null;
+let selectedYear = new Date().getFullYear();
+
+// Auto Refresh Config
+let autoRefreshInterval = null;
+const AUTO_REFRESH_SECONDS = 30;
+let refreshCountdown = AUTO_REFRESH_SECONDS;
+
+// Thai month names
+const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const THAI_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
+// JSONP bridge: GitHub Pages cannot use google.script.run, so every call goes to Apps Script Web App by JSONP.
+function api(action, params = {}, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.includes('PASTE_YOUR_APPS_SCRIPT_WEB_APP_EXEC_URL_HERE')) {
+            reject(new Error('ยังไม่ได้ตั้งค่า GAS_WEB_APP_URL ในไฟล์ index.html'));
+            return;
+        }
+
+        const callbackName = '__gas_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        const qs = new URLSearchParams();
+        qs.set('action', action);
+        qs.set('callback', callbackName);
+
+        Object.entries(params || {}).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            qs.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        });
+
+        const script = document.createElement('script');
+        const sep = GAS_WEB_APP_URL.includes('?') ? '&' : '?';
+        const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('เชื่อมต่อ Apps Script ไม่สำเร็จ หรือใช้เวลานานเกินไป'));
+        }, timeoutMs);
+
+        function cleanup() {
+            clearTimeout(timer);
+            try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+            if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[callbackName] = (payload) => {
+            cleanup();
+            resolve(payload);
+        };
+
+        script.onerror = () => {
+            cleanup();
+            reject(new Error('โหลด API จาก Apps Script ไม่สำเร็จ ตรวจสอบ Web App URL และการ Deploy'));
+        };
+
+        script.src = GAS_WEB_APP_URL + sep + qs.toString();
+        document.body.appendChild(script);
+    });
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    api('getSettings').then(onCfg).catch(onErr);
+});
+
+function onCfg(r) {
+    if (!r.success) return hide('loader') || Swal.fire('Error', r.error, 'error');
+    CFG = r.data || {};
+    // QR/update/edit links must point back to this GitHub Pages front-end, not the Apps Script /exec URL.
+    CFG.API_URL = GAS_WEB_APP_URL;
+    CFG.WEBAPP_URL = window.location.origin + window.location.pathname;
+    
+    if (CFG.SYSTEM_NAME) {
+        document.title = CFG.SYSTEM_NAME;
+        ['nameLogin', 'nameNav'].forEach(id => { if ($(id)) $(id).textContent = CFG.SYSTEM_NAME; });
+    }
+    if (CFG.LOGO_URL) ['logoLogin', 'logoNav'].forEach(id => { if ($(id)) $(id).src = CFG.LOGO_URL; });
+    
+    hide('loader');
+    
+    if (MODE === 'mobile_update' && DOC_ID) loadUpdate(DOC_ID);
+    else if (MODE === 'edit_doc' && DOC_ID) loadEdit(DOC_ID);
+    else checkAuthAndShow();
+}
+
+function checkAuthAndShow() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authFromUrl = urlParams.get('auth');
+    
+    if (authFromUrl === '1' || sessionStorage.getItem('auth') === '1') {
+        sessionStorage.setItem('auth', '1');
+        showDash();
+    } else {
+        show('vLogin');
+        switchLoginTab('search'); // Default to search tab for public
+    }
+}
+
+function onErr(e) { hide('loader'); Swal.fire('Error', e.message || e, 'error'); }
+
+// Helpers
+const $ = id => document.getElementById(id);
+const show = id => { const el = $(id); if (el) el.classList.remove('hidden'); };
+const hide = id => { const el = $(id); if (el) el.classList.add('hidden'); };
+const esc = t => { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; };
+function loader(on) { on ? show('loader') : hide('loader'); }
+
+// Login Tab Logic
+function switchLoginTab(mode) {
+    const searchTab = $('tabSearch');
+    const loginTab = $('tabLogin');
+    const btnSearch = $('tabBtn-search');
+    const btnLogin = $('tabBtn-login');
+
+    if (mode === 'search') {
+        searchTab.classList.remove('hidden');
+        loginTab.classList.add('hidden');
+        btnSearch.classList.add('active');
+        btnLogin.classList.remove('active');
+        $('publicSearchInput').focus();
+    } else {
+        searchTab.classList.add('hidden');
+        loginTab.classList.remove('hidden');
+        btnSearch.classList.remove('active');
+        btnLogin.classList.add('active');
+        $('pwd').focus();
+    }
+}
+
+function doPublicSearch() {
+    const kw = $('publicSearchInput').value.trim();
+    if (!kw) return Swal.fire('แจ้งเตือน', 'กรุณากรอกคำค้นหา', 'warning');
+    
+    loader(true);
+    api('searchPublicDocuments', { keyword: kw }).then(r => {
+        loader(false);
+        if(r.success) {
+            renderPublicResults(r.data);
+        } else {
+            Swal.fire('Error', r.error, 'error');
+        }
+    }).catch(onErr);
+}
+
+function renderPublicResults(list) {
+    const div = $('publicResults');
+    div.innerHTML = '';
+    
+    if (!list.length) {
+        div.innerHTML = '<div class="text-center text-gray-500 py-4">ไม่พบเอกสารที่ค้นหา</div>';
+        return;
+    }
+    
+    list.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'bg-gray-50 p-3 rounded border hover:bg-gray-100 cursor-pointer transition-colors';
+        item.onclick = () => showPublicDetail(d);
+        
+        let docNoBadge = d.docNo ? `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded font-bold mr-1">${d.docNo}</span>` : '';
+        let docNoOWBadge = d.docNoOW ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold mr-1">${d.docNoOW}</span>` : '';
+        
+        item.innerHTML = `
+            <div class="flex justify-between items-start mb-1">
+                <div>
+                   ${docNoBadge}${docNoOWBadge}
+                   <span class="text-xs text-gray-400">${d.date}</span>
+                </div>
+                <span class="pill ${statusCls(d.status)} scale-90 origin-top-right">${d.status}</span>
+            </div>
+            <div class="font-medium text-gray-800 truncate">${d.topic}</div>
+        `;
+        div.appendChild(item);
+    });
+}
+
+function showPublicDetail(d) {
+    $('pdDocNo').textContent = d.docNo || '-';
+    $('pdDocNoOW').textContent = d.docNoOW || '-';
+    $('pdTopic').textContent = d.topic || '-';
+    $('pdDate').textContent = d.date || '-';
+    $('pdStatus').textContent = d.status || '-';
+    $('pdStatus').className = 'pill ' + statusCls(d.status);
+    $('pdLog').textContent = d.log || 'ไม่มีประวัติ';
+    show('mPublicDetail');
+}
+
+// Auto Refresh Functions
+function initAutoRefresh() {
+    const toggle = $('autoRefresh');
+    if (toggle.checked) {
+        startAutoRefresh();
+    }
+    
+    toggle.addEventListener('change', function() {
+        if (this.checked) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    });
+}
+
+function startAutoRefresh() {
+    stopAutoRefresh();
+    refreshCountdown = AUTO_REFRESH_SECONDS;
+    updateRefreshTimer();
+    show('refreshTimer');
+    
+    autoRefreshInterval = setInterval(() => {
+        refreshCountdown--;
+        updateRefreshTimer();
+        
+        if (refreshCountdown <= 0) {
+            refreshCountdown = AUTO_REFRESH_SECONDS;
+            doRefresh(true); // silent refresh
+        }
+    }, 1000);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    hide('refreshTimer');
+}
+
+function updateRefreshTimer() {
+    const timerEl = $('refreshTimer');
+    if (timerEl) {
+        timerEl.textContent = refreshCountdown + 's';
+        if (refreshCountdown <= 5) {
+            timerEl.classList.add('text-orange-500');
+            timerEl.classList.remove('text-blue-600');
+        } else {
+            timerEl.classList.remove('text-orange-500');
+            timerEl.classList.add('text-blue-600');
+        }
+    }
+}
+
+// Auth
+function doLogin(e) {
+    e.preventDefault();
+    loader(true);
+    api('checkLogin', { pwd: $('pwd').value }).then(r => {
+        loader(false);
+        if (r.success) { sessionStorage.setItem('auth', '1'); hide('vLogin'); showDash(); }
+        else Swal.fire('ผิดพลาด', r.error, 'error');
+    }).catch(onErr);
+    return false;
+}
+
+function doLogout() {
+    stopAutoRefresh();
+    sessionStorage.removeItem('auth');
+    hide('vDash');
+    show('vLogin');
+    switchLoginTab('login'); // กลับไปหน้า login ปกติ
+    $('pwd').value = '';
+}
+
+// Dashboard
+function showDash() {
+    show('vDash');
+    loadData();
+    initAutoRefresh();
+    initYearSelect();
+}
+
+function loadData() {
+    const refreshIcon = $('refreshIcon');
+    if (refreshIcon) refreshIcon.classList.add('fa-spin');
+    
+    api('getAllDocuments').then(r => {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        if (r.success) { 
+            DOCS = r.data; 
+            render(); 
+            updateMonthlyDashboard();
+            populateMonthFilter();
+        } else {
+            Swal.fire('Error', r.error || 'โหลดข้อมูลไม่สำเร็จ', 'error');
+        }
+    }).catch(e => {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        onErr(e);
+    });
+}
+
+function doRefresh(silent = false) {
+    if (!silent) {
+        refreshCountdown = AUTO_REFRESH_SECONDS;
+    }
+    loadData();
+    if (!silent) {
+        const Toast = Swal.mixin({
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 1500,
+          timerProgressBar: true,
+          didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer)
+            toast.addEventListener('mouseleave', Swal.resumeTimer)
+          }
+        })
+        Toast.fire({ icon: 'success', title: 'รีเฟรชข้อมูลแล้ว' });
+    }
+}
+
+// Initialize Year Select
+function initYearSelect() {
+    const select = $('yearSelect');
+    const currentYear = new Date().getFullYear();
+    select.innerHTML = '';
+    
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y + 543; // Buddhist year
+        if (y === selectedYear) opt.selected = true;
+        select.appendChild(opt);
+    }
+}
+
+// Populate Month Filter
+function populateMonthFilter() {
+    const select = $('monthFilter');
+    // Save current selection
+    const currentVal = select.value;
+    
+    select.innerHTML = '<option value="">ทุกเดือน</option>';
+    
+    const months = new Set();
+    DOCS.forEach(d => {
+        if (d.createdDate) {
+            const parts = d.createdDate.split('/');
+            if (parts.length >= 2) {
+                months.add(parts[1] + '/' + parts[2]); // MM/YYYY
+            }
+        }
+    });
+    
+    Array.from(months).sort().reverse().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        const [mm, yy] = m.split('/');
+        opt.textContent = THAI_MONTHS[parseInt(mm)-1] + ' ' + (parseInt(yy));
+        if (m === currentVal) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+// Monthly Dashboard
+function updateMonthlyDashboard() {
+    selectedYear = parseInt($('yearSelect').value);
+    renderMonthCards();
+    renderMonthlyChart();
+}
+
+function renderMonthCards() {
+    const container = $('monthCards');
+    container.innerHTML = '';
+    
+    const monthStats = getMonthlyStats();
+    
+    for (let m = 0; m < 12; m++) {
+        const key = `${selectedYear}-${String(m+1).padStart(2,'0')}`;
+        const stat = monthStats[key] || { total: 0, done: 0, pending: 0 };
+        const percent = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+        
+        const card = document.createElement('div');
+        card.className = `month-card bg-white border rounded-lg p-3 text-center ${selectedMonth === m ? 'border-blue-500 ring-2 ring-blue-200' : ''}`;
+        card.onclick = () => selectMonth(m);
+        
+        card.innerHTML = `
+            <div class="text-xs text-gray-500">${THAI_MONTHS[m]}</div>
+            <div class="text-lg font-bold ${stat.total > 0 ? 'text-blue-600' : 'text-gray-300'}">${stat.total}</div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                <div class="bg-green-500 h-1.5 rounded-full" style="width: ${percent}%"></div>
+            </div>
+            <div class="text-xs mt-1 ${stat.done > 0 ? 'text-green-600' : 'text-gray-400'}">เสร็จ ${stat.done}</div>
+        `;
+        container.appendChild(card);
+    }
+}
+
+function getMonthlyStats() {
+    const stats = {};
+    
+    DOCS.forEach(d => {
+        if (d.createdDate) {
+            const parts = d.createdDate.split('/');
+            if (parts.length >= 3) {
+                const year = parseInt(parts[2]);
+                const month = parseInt(parts[1]);
+                const key = `${year}-${String(month).padStart(2,'0')}`;
+                
+                if (!stats[key]) {
+                    stats[key] = { total: 0, done: 0, pending: 0, byType: {}, byStatus: {} };
+                }
+                
+                stats[key].total++;
+                
+                if (d.status.includes('เสร็จ') || d.status.includes('อนุมัติ')) {
+                    stats[key].done++;
+                } else {
+                    stats[key].pending++;
+                }
+                
+                // By type
+                const type = d.type || 'อื่นๆ';
+                stats[key].byType[type] = (stats[key].byType[type] || 0) + 1;
+                
+                // By status
+                stats[key].byStatus[d.status] = (stats[key].byStatus[d.status] || 0) + 1;
+            }
+        }
+    });
+    
+    return stats;
+}
+
+function selectMonth(m) {
+    selectedMonth = selectedMonth === m ? null : m;
+    renderMonthCards();
+    renderMonthlyDetail();
+}
+
+function renderMonthlyDetail() {
+    const container = $('monthlyDetail');
+    
+    if (selectedMonth === null) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">เลือกเดือนเพื่อดูรายละเอียด</p>';
+        return;
+    }
+    
+    const key = `${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}`;
+    const stats = getMonthlyStats()[key];
+    
+    if (!stats || stats.total === 0) {
+        container.innerHTML = `<p class="text-gray-500 text-center py-4">ไม่มีข้อมูลในเดือน ${THAI_MONTHS_FULL[selectedMonth]} ${selectedYear + 543}</p>`;
+        return;
+    }
+    
+    const percent = Math.round((stats.done / stats.total) * 100);
+    
+    let html = `
+        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg p-3 mb-3">
+            <div class="text-sm opacity-80">${THAI_MONTHS_FULL[selectedMonth]} ${selectedYear + 543}</div>
+            <div class="text-2xl font-bold">${stats.total} เอกสาร</div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-2 mb-3">
+            <div class="bg-green-50 rounded-lg p-2 text-center">
+                <div class="text-green-600 font-bold text-lg">${stats.done}</div>
+                <div class="text-xs text-green-700">เสร็จสิ้น (${percent}%)</div>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-2 text-center">
+                <div class="text-yellow-600 font-bold text-lg">${stats.pending}</div>
+                <div class="text-xs text-yellow-700">รอดำเนินการ</div>
+            </div>
+        </div>
+        
+        <div class="text-xs font-semibold text-gray-600 mb-1">แยกตามประเภท</div>
+        <div class="space-y-1 mb-3">
+    `;
+    
+    Object.entries(stats.byType).forEach(([type, count]) => {
+        const pct = Math.round((count / stats.total) * 100);
+        html += `
+            <div class="flex items-center gap-2">
+                <span class="badge ${typeCls(type)}">${type}</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-400 h-2 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="text-xs text-gray-600">${count}</span>
+            </div>
+        `;
+    });
+    
+    html += `
+        </div>
+        <div class="text-xs font-semibold text-gray-600 mb-1">สถานะ</div>
+        <div class="flex flex-wrap gap-1">
+    `;
+    
+    Object.entries(stats.byStatus).forEach(([status, count]) => {
+        html += `<span class="pill ${statusCls(status)}">${status}: ${count}</span>`;
+    });
+    
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function renderMonthlyChart() {
+    const ctx = $('monthlyChart').getContext('2d');
+    const stats = getMonthlyStats();
+    
+    const labels = [];
+    const totalData = [];
+    const doneData = [];
+    const pendingData = [];
+    
+    for (let m = 0; m < 12; m++) {
+        const key = `${selectedYear}-${String(m+1).padStart(2,'0')}`;
+        const stat = stats[key] || { total: 0, done: 0, pending: 0 };
+        
+        labels.push(THAI_MONTHS[m]);
+        totalData.push(stat.total);
+        doneData.push(stat.done);
+        pendingData.push(stat.pending);
+    }
+    
+    if (monthlyChart) {
+        monthlyChart.destroy();
+    }
+    
+    monthlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'เสร็จสิ้น',
+                    data: doneData,
+                    backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                    borderColor: 'rgb(34, 197, 94)',
+                    borderWidth: 1,
+                    borderRadius: 3
+                },
+                {
+                    label: 'รอดำเนินการ',
+                    data: pendingData,
+                    backgroundColor: 'rgba(251, 191, 36, 0.7)',
+                    borderColor: 'rgb(251, 191, 36)',
+                    borderWidth: 1,
+                    borderRadius: 3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 10 }, usePointStyle: true, boxWidth: 6 }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, grid: { color: '#f3f4f6' } }
+            }
+        }
+    });
+}
+
+function render() {
+    const cnt = { all: DOCS.length, 'หนังสือรับ': 0, 'คำสั่ง': 0, 'บันทึกข้อความ': 0, 'อื่นๆ': 0 };
+    DOCS.forEach(d => cnt[d.type] !== undefined ? cnt[d.type]++ : cnt['อื่นๆ']++);
+    $('cAll').textContent = cnt.all;
+    $('cIn').textContent = cnt['หนังสือรับ'];
+    $('cOrder').textContent = cnt['คำสั่ง'];
+    $('cMemo').textContent = cnt['บันทึกข้อความ'];
+    $('cOther').textContent = cnt['อื่นๆ'];
+    
+    let pend = 0, done = 0;
+    DOCS.forEach(d => d.status.includes('เสร็จ') || d.status.includes('อนุมัติ') ? done++ : pend++);
+    $('sTotal').textContent = DOCS.length;
+    $('sPend').textContent = pend;
+    $('sDone').textContent = done;
+    
+    applyFilters();
+}
+
+function applyFilters() {
+    const mainTypes = ['หนังสือรับ', 'คำสั่ง', 'บันทึกข้อความ'];
+    const monthVal = $('monthFilter').value;
+    
+    let list = DOCS;
+    
+    // Filter by type
+    if (FILTER !== 'all') {
+        list = list.filter(d => FILTER === 'อื่นๆ' ? !mainTypes.includes(d.type) : d.type === FILTER);
+    }
+    
+    // Filter by month
+    if (monthVal) {
+        list = list.filter(d => {
+            if (d.createdDate) {
+                const parts = d.createdDate.split('/');
+                if (parts.length >= 3) {
+                    return (parts[1] + '/' + parts[2]) === monthVal;
+                }
+            }
+            return false;
+        });
+    }
+    
+    renderTable(list);
+}
+
+function renderTable(list) {
+    const tb = $('tBody');
+    
+    if (!list.length) { tb.innerHTML = ''; show('empty'); return; }
+    hide('empty');
+    
+    const fragment = document.createDocumentFragment();
+    list.forEach(d => {
+        const tr = document.createElement('tr');
+        const docNoDisplay = d.docNo || '-';
+        tr.innerHTML = `
+            <td class="px-4 py-3">
+                <div class="font-bold text-blue-600">${esc(docNoDisplay)}</div>
+                ${d.docNoOW ? `<div class="text-xs text-purple-500">${esc(d.docNoOW)}</div>` : ''}
+            </td>
+            <td class="px-4 py-3"><span class="badge ${typeCls(d.type)}">${esc(d.type)}</span><div class="text-xs text-gray-500 mt-1">${esc(d.date)}</div></td>
+            <td class="px-4 py-3"><div class="max-w-[150px] sm:max-w-[250px] truncate" title="${esc(d.topic)}">${esc(d.topic)}</div></td>
+            <td class="px-4 py-3 text-gray-500">${esc(d.owner)}</td>
+            <td class="px-4 py-3"><span class="pill ${statusCls(d.status)}">${esc(d.status)}</span></td>
+            <td class="px-4 py-3 text-center whitespace-nowrap">
+                <button onclick="showQrWithData('${d.id}', '${esc(d.docNo)}', '${esc(d.createdDate)}', '${esc(d.createdTime)}', '${esc(d.type)}')" class="btn-icon text-indigo-600 hover:bg-indigo-100" title="QR Code"><i class="fas fa-qrcode"></i></button>
+                <button onclick="goEdit('${d.id}')" class="btn-icon text-amber-600 hover:bg-amber-100" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                <button onclick="goUpdatePage('${d.id}')" class="btn-icon text-blue-600 hover:bg-blue-100" title="อัพเดทสถานะ"><i class="fas fa-tasks"></i></button>
+                <button onclick="doDel('${d.id}')" class="btn-icon text-red-600 hover:bg-red-100" title="ลบ"><i class="fas fa-trash"></i></button>
+            </td>`;
+        fragment.appendChild(tr);
+    });
+    tb.innerHTML = '';
+    tb.appendChild(fragment);
+}
+
+function typeCls(t) { return { 'หนังสือรับ': 't-in', 'คำสั่ง': 't-order', 'บันทึกข้อความ': 't-memo' }[t] || 't-other'; }
+function statusCls(s) { return s.includes('รอ') ? 's-wait' : s.includes('เสร็จ') || s.includes('อนุมัติ') ? 's-done' : s.includes('ตีกลับ') ? 's-back' : 's-proc'; }
+
+function filterType(t) {
+    FILTER = t;
+    document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.t === t));
+    applyFilters();
+}
+
+function doSearch() {
+    const q = $('search').value.toLowerCase();
+    $('tBody').querySelectorAll('tr').forEach(tr => tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none');
+}
+
+// Add
+function openAdd() { 
+    show('mAdd'); 
+    document.querySelector('input[name="docDate"]').value = new Date().toISOString().split('T')[0];
+    api('getNextDocNo').then(r => {
+        if (r.success) $('addDocNo').value = String(r.data.nextNo).padStart(5, '0');
+    }).catch(onErr);
+}
+function closeAdd() { hide('mAdd'); $('fAdd').reset(); }
+
+function doAdd(e) {
+    e.preventDefault();
+    const f = $('fAdd');
+    const formData = { 
+        docType: f.docType.value, 
+        topic: f.topic.value, 
+        docDate: f.docDate.value, 
+        owner: f.owner.value,
+        docNo: f.docNo.value,
+        docNoOW: f.docNoOW.value
+    };
+    
+    loader(true); closeAdd();
+    api('saveDocument', { form: formData }).then(r => {
+        loader(false);
+        r.success ? showQrAfterSave(r.data) : Swal.fire('Error', r.error, 'error');
+    }).catch(onErr);
+    return false;
+}
+
+// Delete
+function doDel(id) {
+    Swal.fire({ title: 'ยืนยันลบ?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก' }).then(r => {
+        if (r.isConfirmed) {
+            loader(true);
+            api('deleteDocument', { id }).then(res => { 
+                loader(false); 
+                res.success ? (Swal.fire({ title: 'สำเร็จ', text: 'ลบแล้ว', icon: 'success', timer: 800, showConfirmButton: false }), loadData()) : Swal.fire('Error', res.error, 'error'); 
+            }).catch(onErr);
+        }
+    });
+}
+
+// QR Functions
+function getResponsiveQrSize() {
+    // คำนวณขนาด QR ให้พอดีหน้าจอ ลบ padding ออก (80px) และไม่เกิน 300px
+    return Math.min(window.innerWidth - 80, 300);
+}
+
+function showQrAfterSave(data) {
+    const url = CFG.WEBAPP_URL + '?view=update&id=' + data.id;
+    const deptName = CFG.DEPT_NAME || 'งานคลังและพัสดุ ศษ.พ.มก';
+    
+    CURRENT_QR_DATA = { url, docNo: data.docNo || '-', date: data.createdDate || '-', time: data.createdTime || '-', dept: deptName, type: data.docType || '-' };
+    
+    $('qrDept').textContent = deptName;
+    $('qrDocNo').textContent = data.docNo || '-';
+    $('qrDate').textContent = data.createdDate || '-';
+    $('qrTime').textContent = data.createdTime || '-';
+    
+    const box = $('qrBox');
+    box.innerHTML = '';
+    const size = getResponsiveQrSize();
+    
+    new QRCode(box, { text: url, width: size, height: size });
+    $('qrUrl').textContent = url;
+    show('mQr');
+}
+
+function showQrWithData(id, docNo, createdDate, createdTime, docType) {
+    const url = CFG.WEBAPP_URL + '?view=update&id=' + id;
+    const deptName = CFG.DEPT_NAME || 'งานคลังและพัสดุ ศษ.พ.มก';
+    
+    CURRENT_QR_DATA = { url, docNo: docNo || '-', date: createdDate || '-', time: createdTime || '-', dept: deptName, type: docType || '-' };
+    
+    $('qrDept').textContent = deptName;
+    $('qrDocNo').textContent = docNo || '-';
+    $('qrDate').textContent = createdDate || '-';
+    $('qrTime').textContent = createdTime || '-';
+    
+    const box = $('qrBox');
+    box.innerHTML = '';
+    const size = getResponsiveQrSize();
+
+    new QRCode(box, { text: url, width: size, height: size });
+    $('qrUrl').textContent = url;
+    show('mQr');
+}
+
+function closeQr() { hide('mQr'); loadData(); }
+
+function dlQrWithHeader() {
+    const qrImg = $('qrBox').querySelector('img');
+    if (!qrImg) return;
+    
+    const canvas = $('qrCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // === ตั้งค่าสัดส่วน (3 : 2) ===
+    const scale = 5; 
+    
+    // กำหนดขนาดฐาน (Base Size) 3.3cm x 2.2cm
+    const baseW = 330; 
+    const baseH = 220; 
+    
+    const canvasWidth = baseW * scale;
+    const canvasHeight = baseH * scale;
+    
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    
+    // 1. วาดพื้นหลังสีขาว
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    
+    // 2. วาดกรอบสี่เหลี่ยมสีดำ (ขอบบาง) รอบนอก
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2 * scale;
+    ctx.strokeRect(5 * scale, 5 * scale, canvasWidth - (10 * scale), canvasHeight - (10 * scale));
+    
+    // === 3. คำนวณตำแหน่งและขนาด QR (แบบไม่เบียด) ===
+    const qrSize = (baseH - 60) * scale; 
+    const qrX = canvasWidth - qrSize - (20 * scale);
+    const qrY = (canvasHeight - qrSize) / 2;
+    
+    // === 4. จัดตำแหน่งตัวหนังสือ (ชิดซ้าย) ===
+    const textX = 25 * scale; 
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#000000'; // สีดำ
+    
+    // --- บรรทัดที่ 1: ชื่องาน (บังคับข้อความสั้น) ---
+    ctx.font = 'bold ' + (14 * scale) + 'px Sarabun, sans-serif'; 
+    
+    // [แก้ตรงนี้] ใส่ข้อความสั้นๆ ตรงๆ เลย ไม่ใช้ตัวแปร เพื่อไม่ให้ยาวเกินไป
+    ctx.fillText("งานคลังและพัสดุ", textX, (45 * scale)); 
+    
+    // --- บรรทัดที่ 2: เลขรับ (ตัดเหลือ 4 หลัก) ---
+    ctx.font = 'bold ' + (55 * scale) + 'px Arial, sans-serif';
+    let showDocNo = String(CURRENT_QR_DATA.docNo || "");
+    if (showDocNo.length > 4) {
+        showDocNo = showDocNo.slice(-4);
+    }
+    ctx.fillText(showDocNo, textX, (110 * scale)); 
+    
+    // --- บรรทัดที่ 3: เวลา ---
+    ctx.font = (24 * scale) + 'px Arial, sans-serif';
+    ctx.fillText(CURRENT_QR_DATA.time, textX, (155 * scale));
+    
+    // --- บรรทัดที่ 4: วันที่ ---
+    let shortDate = CURRENT_QR_DATA.date; 
+    ctx.fillText(shortDate, textX, (190 * scale));
+    
+    // 5. วาดรูป QR Code
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = function() {
+        ctx.imageSmoothingEnabled = false; 
+        ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+        
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png', 1.0);
+        a.download = 'label_' + CURRENT_QR_DATA.docNo + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+    img.src = qrImg.src;
+}
+// QR Scanner Functions
+async function openScanner() {
+    show('mScanner');
+    if ($('manualQrInput')) $('manualQrInput').value = '';
+    if ($('scannerHint')) $('scannerHint').textContent = 'กำลังตรวจสอบกล้อง...';
+
+    if (!window.isSecureContext) {
+        Swal.fire('เปิดกล้องไม่ได้', 'เบราว์เซอร์จะอนุญาตกล้องเฉพาะหน้าเว็บ HTTPS เท่านั้น กรุณาเปิดผ่านลิงก์ GitHub Pages ที่เป็น HTTPS', 'warning');
+        return;
+    }
+
+    if (typeof Html5Qrcode === 'undefined') {
+        Swal.fire('โหลดตัวสแกนไม่สำเร็จ', 'ไม่พบไลบรารี html5-qrcode กรุณาตรวจสอบอินเทอร์เน็ตหรือรีเฟรชหน้าเว็บ', 'error');
+        return;
+    }
+
+    try {
+        const cameras = await Html5Qrcode.getCameras();
+        const sel = $('cameraSelect');
+        sel.innerHTML = '';
+
+        if (!cameras || cameras.length === 0) {
+            sel.innerHTML = '<option value="">ไม่พบกล้อง</option>';
+            $('scannerHint').textContent = 'ไม่พบกล้องบนอุปกรณ์นี้ หรือยังไม่ได้อนุญาตสิทธิ์การใช้กล้อง';
+            return;
+        }
+
+        cameras.forEach((camera, index) => {
+            const opt = document.createElement('option');
+            opt.value = camera.id;
+            opt.textContent = camera.label || `กล้อง ${index + 1}`;
+            const label = (camera.label || '').toLowerCase();
+            if (label.includes('back') || label.includes('rear') || label.includes('environment')) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        await startSelectedCamera();
+    } catch (err) {
+        console.error('Camera list error:', err);
+        $('scannerHint').textContent = 'ยังไม่สามารถเข้าถึงกล้องได้';
+        Swal.fire('ไม่สามารถเปิดกล้องได้', 'กรุณากดอนุญาตกล้องในเบราว์เซอร์ แล้วเปิดผ่านลิงก์ GitHub Pages ที่เป็น HTTPS', 'error');
+    }
+}
+
+async function startSelectedCamera() {
+    try {
+        if (html5QrCode) {
+            try { await html5QrCode.stop(); } catch (e) {}
+            try { await html5QrCode.clear(); } catch (e) {}
+            html5QrCode = null;
+        }
+
+        const cameraId = $('cameraSelect')?.value;
+        if (!cameraId) {
+            $('scannerHint').textContent = 'กรุณาเลือกกล้องก่อนเริ่มสแกน';
+            return;
+        }
+
+        html5QrCode = new Html5Qrcode('qr-reader');
+        const qrSize = Math.min(Math.max(Math.floor(window.innerWidth * 0.65), 220), 320);
+
+        $('scannerHint').textContent = 'กำลังเปิดกล้อง...';
+        await html5QrCode.start(
+            cameraId,
+            { fps: 10, qrbox: { width: qrSize, height: qrSize }, aspectRatio: 1.0 },
+            onScanSuccess,
+            onScanFailure
+        );
+        $('scannerHint').textContent = 'หันกล้องไปที่ QR Code ของเอกสาร ระบบจะเปิดหน้ารายละเอียดให้อัตโนมัติ';
+    } catch (err) {
+        console.error('Camera start error:', err);
+        $('scannerHint').textContent = 'เปิดกล้องไม่สำเร็จ กรุณาตรวจสอบสิทธิ์ Camera';
+        Swal.fire('ไม่สามารถเปิดกล้องได้', 'กรุณาอนุญาตการใช้งานกล้อง หรือเปลี่ยนไปใช้ Chrome/Safari เวอร์ชันล่าสุด', 'error');
+    }
+}
+
+async function closeScanner() {
+    if (html5QrCode) {
+        try { await html5QrCode.stop(); } catch (err) { console.log('Stop error:', err); }
+        try { await html5QrCode.clear(); } catch (err) { console.log('Clear error:', err); }
+        html5QrCode = null;
+    }
+    hide('mScanner');
+}
+
+function extractDocIdFromQr(text) {
+    const value = (text || '').toString().trim();
+    if (!value) return '';
+
+    try {
+        const url = new URL(value);
+        return (url.searchParams.get('id') || '').trim();
+    } catch (e) {
+        // รองรับกรณี QR เป็นเฉพาะ UUID หรือมีข้อความ id=...
+        const match = value.match(/[?&]id=([^&\s]+)/i) || value.match(/id[:=]\s*([a-zA-Z0-9\-]+)/i);
+        if (match) return decodeURIComponent(match[1]).trim();
+        return value;
+    }
+}
+
+function handleManualQrInput() {
+    const id = extractDocIdFromQr($('manualQrInput').value);
+    if (!id) return Swal.fire('แจ้งเตือน', 'กรุณากรอกลิงก์ QR หรือ ID เอกสาร', 'warning');
+    openScannedDocument(id);
+}
+
+function onScanSuccess(decodedText) {
+    const id = extractDocIdFromQr(decodedText);
+    if (!id) {
+        Swal.fire('QR ไม่ถูกต้อง', 'ไม่พบ ID ใน QR Code', 'error');
+        return;
+    }
+    openScannedDocument(id);
+}
+
+async function openScannedDocument(id) {
+    await closeScanner();
+    DOC_ID = id;
+    loadUpdate(id);
+    Swal.fire({ title: 'สแกนสำเร็จ!', text: 'เปิดข้อมูลเอกสารแล้ว', icon: 'success', timer: 900, showConfirmButton: false });
+}
+
+function onScanFailure(error) {}
+
+// Update View
+function loadUpdate(id) {
+    show('vUpdate');
+    hide('vDash');
+    hide('vLogin');
+    hide('vEdit');
+    loader(true);
+    api('getDocumentById', { id }).then(r => {
+        loader(false);
+        if (r.success && r.data) {
+            const d = r.data;
+            $('uDocNo').textContent = d.docNo || '-';
+            $('uDocNoOW').textContent = d.docNoOW || '-';
+            $('uType').innerHTML = `<span class="badge ${typeCls(d.type)}">${esc(d.type)}</span>`;
+            $('uTopic').textContent = d.topic || '-';
+            $('uOwner').textContent = d.owner || '-';
+            $('uStatus').textContent = d.currentStatus || '-';
+            $('uStatus').className = 'pill ' + statusCls(d.currentStatus || '');
+            $('uLog').textContent = d.log || 'ยังไม่มีประวัติ';
+        } else Swal.fire('ไม่พบข้อมูล', r.error, 'error');
+    }).catch(e => { loader(false); Swal.fire('Error', e.message, 'error'); });
+}
+
+function goUpdatePage(id) { 
+    window.open(CFG.WEBAPP_URL + '?view=update&id=' + id, '_blank');
+}
+
+function doUpdateStatus() {
+    const status = $('selStatus').value, name = $('updater').value.trim();
+    if (!name) return Swal.fire('แจ้งเตือน', 'กรุณาระบุชื่อผู้ดำเนินการ', 'warning');
+    
+    loader(true);
+    api('updateDocumentStatus', { id: DOC_ID, newStatus: status, updater: name }).then(r => {
+        loader(false);
+        if (r.success) {
+            $('uStatus').textContent = r.data.currentStatus;
+            $('uStatus').className = 'pill ' + statusCls(r.data.currentStatus);
+            $('uLog').textContent = r.data.log;
+            $('updater').value = '';
+            Swal.fire({ title: 'สำเร็จ', text: 'อัพเดทสถานะเรียบร้อย', icon: 'success', timer: 1000, showConfirmButton: false });
+        } else Swal.fire('Error', r.error, 'error');
+    }).catch(onErr);
+}
+
+// Edit View
+function loadEdit(id) {
+    show('vEdit');
+    hide('vDash');
+    hide('vLogin');
+    hide('vUpdate');
+    loader(true);
+    api('getDocumentById', { id }).then(r => {
+        loader(false);
+        if (r.success && r.data) {
+            const d = r.data;
+            $('eDocNo').value = d.docNo || '';
+            $('eDocNoOW').value = d.docNoOW || '';
+            $('eType').value = d.type || 'หนังสือรับ';
+            $('eTopic').value = d.topic || '';
+            $('eDate').value = d.rawDate || '';
+            $('eOwner').value = d.owner || '';
+            $('eStatus').textContent = d.currentStatus || '-';
+            $('eStatus').className = 'pill ' + statusCls(d.currentStatus || '');
+        } else Swal.fire('ไม่พบข้อมูล', r.error, 'error').then(goHomeDash);
+    }).catch(e => { loader(false); Swal.fire('Error', e.message, 'error').then(goHomeDash); });
+}
+
+function goEdit(id) { 
+    location.href = CFG.WEBAPP_URL + '?view=edit&id=' + id + '&auth=1'; 
+}
+
+function doEdit(e) {
+    e.preventDefault();
+    loader(true);
+    api('editDocument', {
+        id: DOC_ID,
+        form: {
+            docType: $('eType').value,
+            topic: $('eTopic').value,
+            docDate: $('eDate').value,
+            owner: $('eOwner').value,
+            docNo: $('eDocNo').value,
+            docNoOW: $('eDocNoOW').value
+        }
+    }).then(r => {
+        loader(false);
+        if (r.success) {
+            Swal.fire({ title: 'สำเร็จ', text: 'แก้ไขข้อมูลเรียบร้อย', icon: 'success', timer: 1000, showConfirmButton: false }).then(goHomeDash);
+        } else Swal.fire('Error', r.error, 'error');
+    }).catch(onErr);
+    return false;
+}
+
+function goHomeDash() {
+    sessionStorage.setItem('auth', '1');
+    location.href = CFG.WEBAPP_URL + '?auth=1';
+}
+</script>
+</body>
+</html>
